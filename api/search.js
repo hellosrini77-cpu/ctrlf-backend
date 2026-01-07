@@ -152,50 +152,34 @@ async function getDriveFileContent(fileId, accessToken, mimeType) {
       return { content: text.substring(0, 10000), type: 'presentation' };
     }
     
-    // PDF - use Google's OCR by converting to Google Doc first
+    // PDF - download and extract text
     if (mimeType && mimeType.includes('pdf')) {
-      // First, copy the PDF as a Google Doc (triggers OCR)
-      const copyResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}/copy`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            mimeType: 'application/vnd.google-apps.document',
-            name: 'temp_ocr_copy'
-          })
+      try {
+        // Download PDF content
+        const response = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        
+        if (!response.ok) {
+          return { content: null, type: 'pdf', error: 'Failed to download PDF' };
         }
-      );
-      
-      if (!copyResponse.ok) {
-        // If copy fails, try direct download for text-based PDFs
-        return { content: 'PDF content extraction requires Google Docs conversion permissions.', type: 'pdf' };
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        // Try to extract text using pdf-parse
+        try {
+          const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
+          const pdfData = await pdfParse(buffer);
+          return { content: pdfData.text.substring(0, 10000), type: 'pdf' };
+        } catch (parseError) {
+          // If pdf-parse fails, return error
+          return { content: null, type: 'pdf', error: 'Could not parse PDF: ' + parseError.message };
+        }
+      } catch (error) {
+        return { content: null, type: 'pdf', error: error.message };
       }
-      
-      const copyData = await copyResponse.json();
-      const tempDocId = copyData.id;
-      
-      // Export the converted doc as text
-      const textResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${tempDocId}/export?mimeType=text/plain`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-      );
-      
-      const text = await textResponse.text();
-      
-      // Delete the temp file
-      await fetch(
-        `https://www.googleapis.com/drive/v3/files/${tempDocId}`,
-        {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        }
-      );
-      
-      return { content: text.substring(0, 10000), type: 'pdf' };
     }
     
     // Plain text files
