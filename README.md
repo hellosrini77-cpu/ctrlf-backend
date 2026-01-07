@@ -14,7 +14,7 @@ git commit -m "Initial commit"
 git remote add origin https://github.com/YOUR_USERNAME/ctrlf-backend.git
 git push -u origin main
 ```
-
+### 1.
 ### 2. Deploy to Vercel
 
 1. Go to [vercel.com](https://vercel.com)
